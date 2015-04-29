@@ -79,6 +79,30 @@ share structure with it."
           (rotate-head-to-tail sequence (- n))
           sequence)))
 
+(defun shuffle-sublist (list n)
+  (declare (type fixnum n))
+  (if (< n 16)
+      ;; for small lists use Fisher-Yates - O(N*N)
+      (do ((list list (cdr list)))
+          ((< n 2))
+        (rotatef (car list) (car (nthcdr (random n) list)))
+        (decf n))
+      ;; else, divide and conquer - O(N*log(N))
+      (let* ((half (floor n 2))
+             (middle (nthcdr half list)))
+        (do ((a list)
+             (b middle)
+             (remaining n (1- remaining))
+             (remaining-a half))
+            ((= remaining-a 0))
+          (if (< (random remaining) remaining-a)
+              (progn (decf remaining-a)
+                     (setf a (cdr a)))
+              (progn (rotatef (car a) (car b))
+                     (setf b (cdr b)))))
+        (shuffle-sublist middle (- n half))
+        (shuffle-sublist list half))))
+
 (defun shuffle (sequence &key (start 0) end)
   "Returns a random permutation of SEQUENCE bounded by START and END.
 Original sequece may be destructively modified, and share storage with
@@ -88,12 +112,11 @@ sequence."
            (type (or fixnum null) end))
   (etypecase sequence
     (list
-     (let* ((end (or end (proper-list-length sequence)))
-            (n (- end start)))
-       (do ((tail (nthcdr start sequence) (cdr tail)))
-           ((zerop n))
-         (rotatef (car tail) (car (nthcdr (random n) tail)))
-         (decf n))))
+     (let* ((list (nthcdr start sequence))
+            (end (if end
+                     (- end start)
+                     (proper-list-length list))))
+       (shuffle-sublist list end)))
     (vector
      (let ((end (or end (length sequence))))
        (loop for i from start below end
